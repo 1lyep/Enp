@@ -24,37 +24,43 @@
       
       <view class="game-container">
         <view class="word-column">
-          <button
+          <view
             v-for="word in words.chinese"
             :key="word"
             :data-word="word"
-            :class="{ 
-              'word-btn': true,
-              'selected': selectedChinese === word,
-              'completed': completed.includes(word)
-            }"
-            @click="selectWord(word, 'chinese')"
+            :class="[
+              'word-btn',
+                { 
+                  'selected': selectedChinese === word,
+                  'completed': completed.includes(word),
+                  'disabled': completed.includes(word),
+                  'correct-match': animating.has(word),
+                }
+            ]"
             :disabled="completed.includes(word)"
-          >
-            {{ word }}
-          </button>
-        </view>
-
-        <view class="word-column">
-          <button
+            @click="selectWord(word, 'chinese')"
+            >
+              {{ word }}
+          </view> 
+        </view>     
+        <view class="word-column"> 
+          <view
             v-for="word in shuffledEnglish"
             :key="word"
             :data-word="word"
-            :class="{
-              'word-btn': true,
+            :class="[
+            'word-btn',
+            { 
               'selected': selectedEnglish === word,
-              'completed': completed.includes(words.chinese[words.english.indexOf(word)])
-            }"
+              'completed': completed.includes(words.chinese[words.english.indexOf(word)]),
+              'disabled': completed.includes(words.chinese[words.english.indexOf(word)]),
+              'correct-match': animating.has(word),
+            }
+            ]"
             @click="selectWord(word, 'english')"
-            :disabled="completed.includes(words.chinese[words.english.indexOf(word)])"
-          >
-            {{ word }}
-          </button>
+            :disabled="completed.includes(words.chinese[words.english.indexOf(word)])">
+           {{ word }}
+          </view>
         </view>
       </view>
     </template>
@@ -70,6 +76,7 @@ export default {
       chinese: ['旅行者', '柔软', '五', '运动鞋', '牛奶'],
       english: ['traveler', 'soft', 'five', 'sneaker', 'milk']
     })
+    const animating = ref(new Set())
 
     // 游戏状态
     const selectedChinese = ref(null)
@@ -129,19 +136,19 @@ export default {
         score.value += 10
         completed.value.push(selectedChinese.value)
         
-        // 获取按钮元素并立即添加动画类
-        const chineseButton = document.querySelector(`[data-word="${selectedChinese.value}"]`)
-        const englishButton = document.querySelector(`[data-word="${selectedEnglish.value}"]`)
-        
-        requestAnimationFrame(() => {
-          chineseButton?.classList.add('correct-match')
-          englishButton?.classList.add('correct-match')
-        })
+        // ✅ 把两个词加入 animating 集合
+        const newSet = new Set(animating.value)
+        newSet.add(selectedChinese.value)
+        newSet.add(selectedEnglish.value)
+        animating.value = newSet
 
         setTimeout(() => {
-          chineseButton?.classList.remove('correct-match')
-          englishButton?.classList.remove('correct-match')
-          
+          // 500ms 后移除
+          const newSet = new Set(animating.value)
+          newSet.delete(selectedChinese.value)
+          newSet.delete(selectedEnglish.value)
+          animating.value = newSet
+
           if (isGameCompleted.value) {
             clearInterval(timerInterval.value)
             uni.showModal({
@@ -150,11 +157,11 @@ export default {
               showCancel: false
             })
           }
-          
+
           selectedChinese.value = null
           selectedEnglish.value = null
         }, 500)
-      } else {
+    } else {
         // 匹配失败
         mistakes.value++
         setTimeout(() => {
@@ -184,7 +191,9 @@ export default {
       formatTime,
       startGame,
       selectWord,
-      shuffledEnglish
+      shuffledEnglish,
+      animating,
+      checkMatch
     }
   }
 }
@@ -268,18 +277,28 @@ export default {
   justify-content: center;
   text-align: center;
   box-sizing: border-box;
+
+  /* 禁掉点击时的默认效果 */
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.2s ease;
 }
 
 .word-btn.selected {
-  background-color: #4CAF50;
-  color: white;
-  border-color: #45a049;
+  background-color: #c3e3c4;
+  /*color: rgb(171, 171, 171);*/
+  border-color: #708d72;
   /* 移除了transform效果 */
 }
 
 .word-btn.completed {
   background-color: #ddd;
   color: #666;
+}
+
+.word-btn.disabled {
+  background-color: #ddd;
+  color: #666;
+  pointer-events: none; /* 不能点 */
 }
 
 @keyframes correctMatch {
@@ -294,7 +313,7 @@ export default {
 }
 
 .correct-match {
-  animation: correctMatch 0.5s forwards;
+  animation: correctMatch 0.3s forwards;
   pointer-events: none;
 }
 </style>
