@@ -2,9 +2,9 @@
   <view class="content">
     <image class="logo" src="/static/logo.png"></image>
     <view class="text-area">
-      <text class="title">欢迎来到单词学习</text>
+      <text class="title">欢迎来到英语试炼</text>
     </view>
-    <button class="start-btn" @click="startGame">开始游戏</button>
+    <button class="start-btn" @click="startGame">开始</button>
   </view>
 </template>
 

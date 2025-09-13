@@ -1,11 +1,11 @@
 <template>
   <view class="container">
-    <text class="title">单词匹配游戏</text>
+    <text class="title">加油！</text>
     
     <template v-if="!isGameStarted">
       <view class="start-screen">
-        <text class="subtitle">准备开始游戏</text>
-        <button class="start-btn" @click="startGame">开始游戏</button>
+        <text class="subtitle">英语试炼</text>
+        <button class="start-btn" @click="startGame">准备开始</button>
       </view>
     </template>
     
