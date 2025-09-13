@@ -35,6 +35,7 @@
                   'completed': completed.includes(word),
                   'disabled': completed.includes(word),
                   'correct-match': animating.has(word),
+                  'mistake': misss.has(word),
                 }
             ]"
             :disabled="completed.includes(word)"
@@ -55,6 +56,7 @@
               'completed': completed.includes(words.chinese[words.english.indexOf(word)]),
               'disabled': completed.includes(words.chinese[words.english.indexOf(word)]),
               'correct-match': animating.has(word),
+              'mistake': misss.has(word),
             }
             ]"
             @click="selectWord(word, 'english')"
@@ -77,10 +79,14 @@ export default {
       english: ['traveler', 'soft', 'five', 'sneaker', 'milk']
     })
     const animating = ref(new Set())
+    const misss = ref(new Set())
+
 
     // 游戏状态
     const selectedChinese = ref(null)
     const selectedEnglish = ref(null)
+    const midChinese = ref(null)
+    const midEnglish = ref(null)
     const score = ref(0)
     const completed = ref([])
     const mistakes = ref(0)
@@ -116,9 +122,10 @@ export default {
 
     const selectWord = (word, type) => {
       if (type === 'chinese') {
-        selectedChinese.value = word
-      } else {
-        selectedEnglish.value = word
+        // 如果点的是已经选中的，再点一次就取消
+        selectedChinese.value = selectedChinese.value === word ? null : word
+      } else if (type === 'english') {
+        selectedEnglish.value = selectedEnglish.value === word ? null : word
       }
 
       // 检查匹配
@@ -141,12 +148,16 @@ export default {
         newSet.add(selectedChinese.value)
         newSet.add(selectedEnglish.value)
         animating.value = newSet
+        midChinese.value = selectedChinese.value
+        midEnglish.value = selectedEnglish.value
+        selectedChinese.value = null
+        selectedEnglish.value = null
 
         setTimeout(() => {
           // 500ms 后移除
           const newSet = new Set(animating.value)
-          newSet.delete(selectedChinese.value)
-          newSet.delete(selectedEnglish.value)
+          newSet.delete(midChinese.value)
+          newSet.delete(midEnglish.value)
           animating.value = newSet
 
           if (isGameCompleted.value) {
@@ -158,16 +169,28 @@ export default {
             })
           }
 
-          selectedChinese.value = null
-          selectedEnglish.value = null
+          midChinese.value = null
+          midEnglish.value = null
         }, 500)
     } else {
         // 匹配失败
         mistakes.value++
+        const newSet = new Set(misss.value)
+        newSet.add(selectedChinese.value)
+        newSet.add(selectedEnglish.value)
+        misss.value = newSet
+        midChinese.value = selectedChinese.value
+        midEnglish.value = selectedEnglish.value
+        selectedChinese.value = null
+        selectedEnglish.value = null
         setTimeout(() => {
-          selectedChinese.value = null
-          selectedEnglish.value = null
-        }, 1000)
+          const newSet = new Set(misss.value)
+          newSet.delete(midChinese.value)
+          newSet.delete(midEnglish.value)
+          misss.value = newSet
+          midChinese.value = null
+          midEnglish.value = null
+        }, 300)
       }
     }
     
@@ -193,7 +216,8 @@ export default {
       selectWord,
       shuffledEnglish,
       animating,
-      checkMatch
+      checkMatch,
+      misss 
     }
   }
 }
@@ -299,6 +323,11 @@ export default {
   background-color: #ddd;
   color: #666;
   pointer-events: none; /* 不能点 */
+}
+
+.word-btn.mistake {
+  background-color: #f44336;
+  color: white;
 }
 
 @keyframes correctMatch {
