@@ -40,6 +40,7 @@
             ]"
             :disabled="completed.includes(word)"
             @click="selectWord(word, 'chinese')"
+            :hover-class="none"
             >
               {{ word }}
           </view> 
@@ -60,7 +61,9 @@
             }
             ]"
             @click="selectWord(word, 'english')"
-            :disabled="completed.includes(words.chinese[words.english.indexOf(word)])">
+            :disabled="completed.includes(words.chinese[words.english.indexOf(word)])"
+            :hover-class="none"
+            >
            {{ word }}
           </view>
         </view>
@@ -302,18 +305,13 @@ export default {
   text-align: center;
   box-sizing: border-box;
 
-
-  /* 禁掉点击时的默认效果 */
-  -webkit-tap-highlight-color: transparent;
-  transition: background-color 0.2s ease;
 }
 
 
-
 .word-btn.selected {
-  background-color: #c3e3c4;
+  background-color: #c3e3c4 !important;
   border-color: #708d72;
-
+  transform: scale(1.05) !important;
 }
 
 .word-btn.completed {
