@@ -85,6 +85,25 @@ export default {
     const misss = ref(new Set())
 
 
+    // 模拟的单词数据库，您可以替换为真实的API调用
+    const wordDatabase = reactive([
+      { chinese: '苹果', english: 'apple' },
+      { chinese: '香蕉', english: 'banana' },
+      { chinese: '橙子', english: 'orange' },
+      { chinese: '草莓', english: 'strawberry' },
+      { chinese: '西瓜', english: 'watermelon' },
+      { chinese: '电脑', english: 'computer' },
+      { chinese: '手机', english: 'phone' },
+      { chinese: '书本', english: 'book' },
+      { chinese: '桌子', english: 'desk' },
+      { chinese: '椅子', english: 'chair' },
+    ])
+
+    // -- 新增逻辑：批量替换单词 --
+    const pendingReplacement = ref([])
+    const REPLACE_THRESHOLD = 3 // 每匹配 3 对单词后，替换这 3 对
+
+
     // 游戏状态
     const selectedChinese = ref(null)
     const selectedEnglish = ref(null)
@@ -98,7 +117,8 @@ export default {
     const timerInterval = ref(null)
 
     // 计算属性
-    const isGameCompleted = computed(() => completed.value.length === words.chinese.length)
+    // 游戏完成条件：数据库为空，且当前所有单词都已匹配
+    const isGameCompleted = computed(() => wordDatabase.length === 0 && completed.value.length === words.chinese.length)
     
     // 随机打乱单词顺序
     const shuffledEnglish = ref([...words.english])
@@ -146,6 +166,12 @@ export default {
         score.value += 10
         completed.value.push(selectedChinese.value)
         
+        // 将匹配的词对加入等待替换的队列
+        pendingReplacement.value.push({
+          chinese: selectedChinese.value,
+          english: selectedEnglish.value
+        })
+
         // ✅ 把两个词加入 animating 集合
         const newSet = new Set(animating.value)
         newSet.add(selectedChinese.value)
@@ -162,6 +188,11 @@ export default {
           newSet.delete(midChinese.value)
           newSet.delete(midEnglish.value)
           animating.value = newSet
+
+          // 检查是否达到替换单词的阈值
+          if (pendingReplacement.value.length >= REPLACE_THRESHOLD) {
+            replaceBatchOfWords()
+          }
 
           if (isGameCompleted.value) {
             clearInterval(timerInterval.value)
@@ -197,6 +228,53 @@ export default {
       }
     }
     
+    const replaceBatchOfWords = () => {
+      const wordsToReplace = [...pendingReplacement.value]
+      pendingReplacement.value = [] // 清空队列
+
+      // 从数据库获取等量的新词
+      const newWords = []
+      for (let i = 0; i < wordsToReplace.length; i++) {
+        if (wordDatabase.length > 0) {
+          newWords.push(wordDatabase.shift())
+        }
+      }
+
+      if (newWords.length === 0) {
+        // 数据库空了，把待替换的词放回去，因为它们无法被替换
+        pendingReplacement.value = wordsToReplace
+        return
+      }
+
+      const oldChineseWordsForCleanup = new Set()
+
+      // 遍历待替换的词
+      for (let i = 0; i < wordsToReplace.length; i++) {
+        const oldPair = wordsToReplace[i]
+        const newPair = newWords[i]
+
+        if (!newPair) continue // 如果新词不够，则不替换
+
+        oldChineseWordsForCleanup.add(oldPair.chinese)
+
+        // 1. 替换主数据源中的词
+        const masterIndex = words.chinese.indexOf(oldPair.chinese)
+        if (masterIndex > -1) {
+          words.chinese[masterIndex] = newPair.chinese
+          words.english[masterIndex] = newPair.english
+        }
+
+        // 2. 替换乱序列表中的词
+        const shuffledIndex = shuffledEnglish.value.indexOf(oldPair.english)
+        if (shuffledIndex > -1) {
+          shuffledEnglish.value[shuffledIndex] = newPair.english
+        }
+      }
+
+      // 3. 从 'completed' 数组中移除被替换掉的旧词
+      completed.value = completed.value.filter(word => !oldChineseWordsForCleanup.has(word))
+    }
+
     // 组件卸载时清理计时器
     onUnmounted(() => {
       if (timerInterval.value) {
