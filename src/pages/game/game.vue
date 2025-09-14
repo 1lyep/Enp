@@ -302,16 +302,18 @@ export default {
   text-align: center;
   box-sizing: border-box;
 
+
   /* 禁掉点击时的默认效果 */
   -webkit-tap-highlight-color: transparent;
   transition: background-color 0.2s ease;
 }
 
+
+
 .word-btn.selected {
   background-color: #c3e3c4;
-  /*color: rgb(171, 171, 171);*/
   border-color: #708d72;
-  /* 移除了transform效果 */
+
 }
 
 .word-btn.completed {
@@ -333,13 +335,20 @@ export default {
 @keyframes correctMatch {
   0% {
     background-color: #4CAF50;
+    transform: scale(1);
     box-shadow: 0 0 0 rgba(76, 175, 80, 0);
+  }
+  70% {
+    transform: scale(1.1);
+    box-shadow: 0 0 15px rgba(76, 175, 80, 0.8);
   }
   100% {
     background-color: #45a049;
-    box-shadow: 0 0 15px rgba(76, 175, 80, 0.8);
+    transform: scale(1);
+    box-shadow: 0 0 10px rgba(76, 175, 80, 0.6);
   }
 }
+
 
 .correct-match {
   animation: correctMatch 0.3s forwards;
