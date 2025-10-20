@@ -410,6 +410,7 @@ export default {
 
 .word-btn.mistake {
   background-color: #f44336;
+  animation: mistakeMatch 0.3s forwards;
   color: white;
 }
 
@@ -427,6 +428,24 @@ export default {
     background-color: #45a049;
     transform: scale(1);
     box-shadow: 0 0 10px rgba(76, 175, 80, 0.6);
+  }
+}
+
+@keyframes mistakeMatch {
+  0% {
+    background-color: #f44336;
+    transform: scale(1);
+    box-shadow: 0 0 0 rgba(244, 67, 54, 0);
+  }
+  50% {
+    background-color: #ff5252;
+    transform: scale(1.1);
+    box-shadow: 0 0 12px rgba(244, 67, 54, 0.9);
+  }
+  100% {
+    background-color: #d32f2f;
+    transform: scale(1);
+    box-shadow: 0 0 10px rgba(244, 67, 54, 0.6);
   }
 }
 
