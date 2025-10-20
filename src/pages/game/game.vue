@@ -231,6 +231,7 @@ export default {
     const replaceBatchOfWords = () => {
       const wordsToReplace = [...pendingReplacement.value]
       pendingReplacement.value = [] // 清空队列
+      const shuffledIndexes = []
 
       // 从数据库获取等量的新词
       const newWords = []
@@ -265,9 +266,13 @@ export default {
         }
 
         // 2. 替换乱序列表中的词
-        const shuffledIndex = shuffledEnglish.value.indexOf(oldPair.english)
-        if (shuffledIndex > -1) {
-          shuffledEnglish.value[shuffledIndex] = newPair.english
+        shuffledIndexes[i] = shuffledEnglish.value.indexOf(oldPair.english)
+      }
+
+      shuffledIndexes.sort(() => Math.random() - 0.5)
+      for (let i = 0; i < wordsToReplace.length; i++){
+        if (shuffledIndexes[i] > -1) {
+          shuffledEnglish.value[shuffledIndexes[i]] = newWords[i].english
         }
       }
 
