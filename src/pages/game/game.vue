@@ -4,8 +4,10 @@
     
     <template v-if="!isGameStarted">
       <view class="start-screen">
-        <text class="subtitle">英语试炼</text>
+        <text class="subtitle">{{ selectedWordbook ? selectedWordbook.title : '英语试炼' }}</text>
+        <text class="wordbook-desc" v-if="selectedWordbook">{{ selectedWordbook.description }}</text>
         <button class="start-btn" @click="startGame">准备开始</button>
+        <button class="back-btn" @click="goBack">选择其他词书</button>
       </view>
     </template>
     
@@ -73,7 +75,7 @@
 </template>
 
 <script>
-import { ref, reactive, computed, onUnmounted } from 'vue'
+import { ref, reactive, computed, onUnmounted, onMounted } from 'vue'
 
 export default {
   setup() {
@@ -84,7 +86,9 @@ export default {
     const animating = ref(new Set())
     const misss = ref(new Set())
 
-
+    // 选中的词书数据
+    const selectedWordbook = ref(null)
+    
     // 模拟的单词数据库，您可以替换为真实的API调用
     const wordDatabase = reactive([
       { chinese: '苹果', english: 'apple' },
@@ -98,6 +102,38 @@ export default {
       { chinese: '桌子', english: 'desk' },
       { chinese: '椅子', english: 'chair' },
     ])
+    
+    // 在组件挂载时加载词书数据
+    onMounted(() => {
+      try {
+        const storedWordbook = uni.getStorageSync('selectedWordbook')
+        
+        if (storedWordbook && storedWordbook.words && storedWordbook.words.length > 0) {
+          selectedWordbook.value = storedWordbook
+          
+          // 清空原有数据库，添加词书中的单词
+          wordDatabase.splice(0, wordDatabase.length)
+          storedWordbook.words.forEach(word => {
+            wordDatabase.push(word)
+          })
+          
+          // 更新当前显示的单词
+          const chineseWords = storedWordbook.words.map(w => w.chinese)
+          const englishWords = storedWordbook.words.map(w => w.english)
+          
+          words.chinese.splice(0, words.chinese.length, ...chineseWords.slice(0, 5))
+          words.english.splice(0, words.english.length, ...englishWords.slice(0, 5))
+          
+          // 更新乱序英文单词列表
+          shuffledEnglish.value = [...words.english]
+        } else {
+          // 如果没有选中的词书，使用默认单词
+          console.log('没有选中的词书，使用默认单词')
+        }
+      } catch (error) {
+        console.error('加载词书数据失败:', error)
+      }
+    })
 
     // -- 新增逻辑：批量替换单词 --
     const pendingReplacement = ref([])
@@ -129,6 +165,8 @@ export default {
       mistakes.value = 0
       timer.value = 0
       isGameStarted.value = true
+      
+      // 重新打乱英文单词顺序
       shuffledEnglish.value = [...words.english].sort(() => Math.random() - 0.5)
       
       // 启动计时器
@@ -231,30 +269,47 @@ export default {
     const replaceBatchOfWords = () => {
       const wordsToReplace = [...pendingReplacement.value]
       pendingReplacement.value = [] // 清空队列
-      const shuffledIndexes = []
 
-      // 从数据库获取等量的新词
+      // 从数据库获取等量的新词，确保不重复
       const newWords = []
+      const usedWords = new Set([...words.chinese, ...words.english]) // 当前已使用的单词
+      
       for (let i = 0; i < wordsToReplace.length; i++) {
         if (wordDatabase.length > 0) {
-          newWords.push(wordDatabase.shift())
+          // 找到不在当前显示单词中的新词
+          let newWord = null
+          let newWordIndex = -1
+          
+          for (let j = 0; j < wordDatabase.length; j++) {
+            const candidate = wordDatabase[j]
+            if (!usedWords.has(candidate.chinese) && !usedWords.has(candidate.english)) {
+              newWord = candidate
+              newWordIndex = j
+              break
+            }
+          }
+          
+          if (newWord) {
+            newWords.push(newWord)
+            wordDatabase.splice(newWordIndex, 1) // 从数据库中移除
+            usedWords.add(newWord.chinese)
+            usedWords.add(newWord.english)
+          }
         }
       }
 
       if (newWords.length === 0) {
-        // 数据库空了，把待替换的词放回去，因为它们无法被替换
+        // 数据库空了或没有合适的新词，把待替换的词放回去
         pendingReplacement.value = wordsToReplace
         return
       }
 
       const oldChineseWordsForCleanup = new Set()
 
-      // 遍历待替换的词
-      for (let i = 0; i < wordsToReplace.length; i++) {
+      // 遍历待替换的词，进行替换
+      for (let i = 0; i < wordsToReplace.length && i < newWords.length; i++) {
         const oldPair = wordsToReplace[i]
         const newPair = newWords[i]
-
-        if (!newPair) continue // 如果新词不够，则不替换
 
         oldChineseWordsForCleanup.add(oldPair.chinese)
 
@@ -266,18 +321,19 @@ export default {
         }
 
         // 2. 替换乱序列表中的词
-        shuffledIndexes[i] = shuffledEnglish.value.indexOf(oldPair.english)
-      }
-
-      shuffledIndexes.sort(() => Math.random() - 0.5)
-      for (let i = 0; i < wordsToReplace.length; i++){
-        if (shuffledIndexes[i] > -1) {
-          shuffledEnglish.value[shuffledIndexes[i]] = newWords[i].english
+        const shuffledIndex = shuffledEnglish.value.indexOf(oldPair.english)
+        if (shuffledIndex > -1) {
+          shuffledEnglish.value[shuffledIndex] = newPair.english
         }
       }
 
       // 3. 从 'completed' 数组中移除被替换掉的旧词
       completed.value = completed.value.filter(word => !oldChineseWordsForCleanup.has(word))
+    }
+
+    // 返回词书选择页面
+    const goBack = () => {
+      uni.navigateBack()
     }
 
     // 组件卸载时清理计时器
@@ -297,13 +353,15 @@ export default {
       timer,
       isGameStarted,
       isGameCompleted,
+      selectedWordbook,
       formatTime,
       startGame,
       selectWord,
       shuffledEnglish,
       animating,
       checkMatch,
-      misss 
+      misss,
+      goBack
     }
   }
 }
@@ -340,6 +398,24 @@ export default {
   color: white;
   border: none;
   border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.back-btn {
+  padding: 12px 24px;
+  font-size: 16px;
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  border-radius: 8px;
+}
+
+.wordbook-desc {
+  font-size: 14px;
+  color: #666;
+  text-align: center;
+  margin-bottom: 20px;
+  line-height: 1.4;
 }
 
 .game-info {

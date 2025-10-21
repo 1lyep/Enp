@@ -18,7 +18,7 @@ export default {
   methods: {
     startGame() {
       uni.navigateTo({
-        url: '/pages/game/game'
+        url: '/pages/game/wordsIndex'
       })
     }
   }
