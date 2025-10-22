@@ -2,9 +2,6 @@
 	<div class="words-index">
 		<header class="topbar">
 			<view class="title">选择词书</view>
-			<button class="icon-btn" @click="onAdd" aria-label="新增词书">
-				<text class="icon">+</text>
-			</button>
 		</header>
 
 		<main class="content">
@@ -28,12 +25,14 @@
 			</div>
 		</main>
 
+		<!-- 新增：始终可见的浮动添加按钮（与屏幕右侧和底部边缘相接） -->
+		<button class="fab" @click="onAdd" aria-label="新增词书">+</button>
+
 		<!-- 新增词书弹窗 -->
 		<view v-if="showAddModal" class="modal-overlay" @click="closeAddModal">
 			<view class="modal-content" @click.stop>
 				<view class="modal-header">
 					<text class="modal-title">新增词书</text>
-					<button class="close-btn" @click="closeAddModal">×</button>
 				</view>
 				<view class="modal-body">
 					<view class="form-group">
@@ -46,9 +45,9 @@
 					</view>
 					<view class="form-group">
 						<text class="label">难度</text>
-						<picker @change="onDifficultyChange" :value="difficultyIndex" :range="difficultyOptions">
-							<view class="picker">{{ difficultyOptions[difficultyIndex] }}</view>
-						</picker>
+						<select v-model.number="difficultyIndex" @change="onDifficultyChange" class="select">
+							<option v-for="(opt, idx) in difficultyOptions" :key="idx" :value="idx">{{ opt }}</option>
+						</select>
 					</view>
 				</view>
 				<view class="modal-footer">
@@ -156,10 +155,11 @@ function closeAddModal() {
 	showAddModal.value = false
 }
 
-// 难度选择变化
+// 难度选择变化（改为处理原生 select 事件）
 function onDifficultyChange(e) {
-	difficultyIndex.value = e.detail.value
-	newWordbook.difficulty = difficultyMap[e.detail.value]
+	const idx = Number(e.target.value)
+	difficultyIndex.value = idx
+	newWordbook.difficulty = difficultyMap[idx]
 }
 
 // 确认新增
@@ -223,30 +223,6 @@ function confirmAdd() {
 	color: #333;
 }
 
-.icon-btn {
-	width: 44px;
-	height: 44px;
-	border: 2px solid #333;
-	border-radius: 12px;
-	background: #fff;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	transition: all 0.15s ease;
-	-webkit-tap-highlight-color: transparent;
-}
-
-.icon-btn:active {
-	transform: scale(0.9);
-	background: #f5f5f5;
-}
-
-.icon {
-	color: #333;
-	font-size: 18px;
-	font-weight: bold;
-}
-
 /* 主体内容 */
 .content {
 	padding-top: 0;
@@ -268,7 +244,7 @@ function confirmAdd() {
 .card {
 	background: white;
 	border: 2px solid #333;
-	border-radius: 12px;
+	border-radius: 16px; /* 从 12px 改为 16px，使边更圆 */
 	overflow: hidden;
 	transition: all 0.15s ease;
 	position: relative;
@@ -338,26 +314,6 @@ function confirmAdd() {
 	letter-spacing: 0.3px;
 }
 
-.close-btn {
-	width: 32px;
-	height: 32px;
-	border-radius: 16px;
-	background: #f8f9fa;
-	border: none;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	font-size: 16px;
-	color: #7f8c8d;
-	transition: all 0.15s ease;
-	-webkit-tap-highlight-color: transparent;
-}
-
-.close-btn:active {
-	background: #e9ecef;
-	transform: scale(0.9);
-}
-
 .modal-body {
 	padding: 24px;
 }
@@ -393,7 +349,10 @@ function confirmAdd() {
 	background: white;
 }
 
-.picker {
+.select {
+	appearance: none;
+	-webkit-appearance: none;
+	-moz-appearance: none;
 	width: 100%;
 	height: 40px;
 	padding: 0 12px;
@@ -402,12 +361,13 @@ function confirmAdd() {
 	display: flex;
 	align-items: center;
 	font-size: 15px;
-	background: #fafbfc;
+	background: #fafbfc url("data:image/svg+xml;charset=UTF-8,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23555' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 12px center / 10px 6px;
 	box-sizing: border-box;
 	transition: all 0.2s ease;
 }
 
-.picker:focus {
+.select:focus {
+	outline: none;
 	border-color: #2c3e50;
 	background: white;
 }
@@ -473,7 +433,7 @@ function confirmAdd() {
 	background: #fff;
 	color: #333;
 	border: 2px solid #333;
-	border-radius: 12px;
+	border-radius: 16px; /* 更圆 */
 	font-size: 15px;
 	font-weight: bold;
 	transition: all 0.15s ease;
@@ -485,90 +445,58 @@ function confirmAdd() {
 	transform: scale(0.95);
 }
 
-/* 响应式设计 */
-@media (max-width: 768px) {
-	.words-index {
-		padding: env(safe-area-inset-top) 16px 20px 16px;
-	}
-	
-	.cards {
-		grid-template-columns: 1fr;
-		gap: 20px;
-	}
-	
-	.card-thumb {
-		height: 80px;
-	}
-	
-	.card-icon {
-		font-size: 32px;
-	}
-	
-	.modal-content {
-		margin: 0 16px;
-	}
-	
-	.empty-state {
-		padding: 60px 16px;
+/* 浮动添加按钮：与屏幕右侧和底部边缘相接，始终可见 */
+.fab {
+	position: fixed;
+	right: 12px; /* 从 0 改为 12px，便于显示圆角 */
+	bottom: calc(12px + env(safe-area-inset-bottom));
+	width: 70px;
+	height: 64px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: #fff;
+	color: #333;
+	border: 2px solid #333;
+	border-radius: 16px; /* 关键：圆角 */
+	box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+	font-size: 28px;
+	line-height: 1;
+	cursor: pointer;
+	z-index: 1200;
+	-webkit-tap-highlight-color: transparent;
+	transition: transform 0.12s ease, background 0.12s ease;
+	padding: 0;               /* 去掉可能影响居中的内边距 */
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;     /* 垂直居中 */
+	justify-content: center; /* 水平居中 */
+	line-height: 1;
+	font-weight: 700;        /* 稍微加粗，视觉更居中 */
+	transform: translateY(-1px);
+}
+
+/* 点击反馈 */
+.fab:active {
+	transform: translateY(-1px) scale(0.96);
+	background: #f5f5f5;
+}
+
+/* 可选：在保留安全区时让按钮稍上移（若需要贴合物理屏幕边缘可移除） */
+@supports (padding: env(safe-area-inset-bottom)) {
+	.fab {
+		bottom: calc(12px + env(safe-area-inset-bottom));
+		right: calc(12px + env(safe-area-inset-right));
 	}
 }
 
+/* 小屏调整 */
 @media (max-width: 480px) {
-	.words-index {
-		padding: env(safe-area-inset-top) 12px 16px 12px;
-	}
-	
-	.topbar {
+	.fab {
+		width: 56px;
 		height: 56px;
-		margin-bottom: 20px;
-	}
-	
-	.title {
-		font-size: 20px;
-	}
-	
-	.icon-btn {
-		width: 40px;
-		height: 40px;
-	}
-	
-	.icon {
-		font-size: 16px;
-	}
-	
-	.cards {
-		gap: 16px;
-	}
-	
-	.card {
-		min-height: 100px;
-	}
-	
-	.card-content {
-		padding: 25px;
-		min-height: 100px;
-	}
-	
-	.card-info {
-		padding: 16px;
-	}
-	
-	.card-title {
-		font-size: 16px;
-	}
-	
-	.card-desc {
-		font-size: 13px;
-	}
-	
-	.btn-cancel, .btn-confirm {
-		height: 48px;
-		font-size: 16px;
-	}
-	
-	.empty-btn {
-		padding: 16px 32px;
-		font-size: 16px;
+		font-size: 24px;
+		border-radius: 14px;
 	}
 }
 </style>
