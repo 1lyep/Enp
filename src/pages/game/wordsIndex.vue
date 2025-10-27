@@ -4,18 +4,34 @@
 			<view class="title">选择词书</view>
 		</header>
 
-		<main class="content">
+		<main class="content" @click="cancelPendingDelete">
 			<div v-if="wordbooks.length > 0" class="cards">
-				<div 
-					v-for="wordbook in wordbooks" 
-					:key="wordbook.id"
-					class="card"
-					@click="selectWordbook(wordbook)"
-				>
-					<div class="card-content">
-						<div class="card-title">{{ wordbook.title }}</div>
+					<div 
+						v-for="wordbook in wordbooks" 
+						:key="wordbook.id"
+						:class="['card', { 'editing': editMode }]"
+						@click.stop="onCardClick(wordbook)"
+						@touchstart.passive="startPress(wordbook)" @touchend="cancelPress" @touchcancel="cancelPress"
+						@mousedown="startPress(wordbook)" @mouseup="cancelPress" @mouseleave="cancelPress"
+						:style="pressStyle(wordbook)"
+					>
+						<div class="card-content">
+							<!-- 覆盖层已移除；长按事件由外层 card 捕获 -->
+
+							<!-- 如果处于待删除状态，将卡片内容替换为叉号 -->
+							<div v-if="showDeleteId === wordbook.id" class="delete-cross" @click.stop="confirmDelete(wordbook.id)">✕</div>
+
+							<!-- 否则显示正常标题 -->
+							<div v-else class="card-title">{{ wordbook.title }}</div>
+						</div>
 					</div>
-				</div>
+
+					<!-- 编辑模式下末尾显示一个添加卡片 -->
+					<div v-if="editMode" class="card add-card" @click="onAdd">
+						<div class="card-content add-content">
+							<div class="add-plus">+</div>
+						</div>
+					</div>
 			</div>
 			
 			<!-- 空状态 -->
@@ -25,8 +41,8 @@
 			</div>
 		</main>
 
-		<!-- 新增：始终可见的浮动添加按钮（与屏幕右侧和底部边缘相接） -->
-		<button class="fab" @click="onAdd" aria-label="新增词书">+</button>
+		<!-- 浮动按钮：切换到编辑模式（编辑模式下可再次点击退出） -->
+			<button class="fab" @click="toggleEditMode" aria-label="编辑模式">{{ editMode ? '✓' : '✎' }}</button>
 
 		<!-- 新增词书弹窗 -->
 		<view v-if="showAddModal" class="modal-overlay" @click="closeAddModal">
@@ -95,6 +111,130 @@ const newWordbook = reactive({
 	difficulty: 'easy'
 })
 
+// 编辑模式状态
+const editMode = ref(false)
+
+// 切换编辑模式
+function toggleEditMode() {
+	editMode.value = !editMode.value
+	// 退出编辑模式时清除待删除提示
+	if (!editMode.value) {
+		cancelPendingDelete()
+	}
+}
+
+// （已移除：选中变深色的逻辑）
+
+// 删除词书（立即删除，长按触发）
+function deleteWordbook(id) {
+	const idx = wordbooks.value.findIndex(w => w.id === id)
+	if (idx !== -1) {
+		wordbooks.value.splice(idx, 1)
+	}
+}
+
+// 卡片点击处理：编辑模式下选中/取消；普通模式下选择并进入游戏
+function onCardClick(wordbook) {
+	if (editMode.value) {
+		// 如果该卡片处于待删除状态（长按后变成深红），再次点击该卡片则删除
+		if (showDeleteId.value === wordbook.id) {
+			confirmDelete(wordbook.id)
+		}
+		// 编辑模式下短按其它卡片不做任何操作（页面空白取消）
+		return
+	}
+
+	// 普通模式下点击进入游戏
+	selectWordbook(wordbook)
+}
+
+// 长按处理：用 requestAnimationFrame 做渐进反馈
+const pressTargetId = ref(null)
+const pressStartTime = ref(0)
+const rafId = ref(null)
+const pressProgress = ref(0) // 0.0 ~ 1.0
+const LONG_PRESS_DURATION = 600
+// 待确认删除的词书 id（长按到阈值后显示叉号，点击叉号才真正删除）
+const showDeleteId = ref(null)
+
+function startPress(wordbook) {
+	cancelPress()
+	pressTargetId.value = wordbook.id
+	pressStartTime.value = performance.now()
+	pressProgress.value = 0
+
+	const tick = (now) => {
+		const elapsed = now - pressStartTime.value
+		const progress = Math.min(elapsed / LONG_PRESS_DURATION, 1)
+		pressProgress.value = progress
+
+		if (progress >= 1) {
+			// 达到长按阈值
+			onLongPress(wordbook)
+			rafId.value = null
+			pressProgress.value = 0
+			pressTargetId.value = null
+			return
+		}
+
+		rafId.value = requestAnimationFrame(tick)
+	}
+
+	rafId.value = requestAnimationFrame(tick)
+}
+
+function cancelPress() {
+	if (rafId.value) {
+		cancelAnimationFrame(rafId.value)
+		rafId.value = null
+	}
+	pressProgress.value = 0
+	pressTargetId.value = null
+}
+
+function onLongPress(wordbook) {
+	if (!editMode.value) return
+	// 显示叉号（不直接删除），由用户再点击叉号确认
+	showDeleteId.value = wordbook.id
+	// 清理进度并计时器
+	pressProgress.value = 0
+	if (rafId.value) {
+		cancelAnimationFrame(rafId.value)
+		rafId.value = null
+	}
+}
+
+// 取消待删除（例如点击其他地方）
+function cancelPendingDelete() {
+	showDeleteId.value = null
+}
+
+// 用户点击叉号后调用，真正删除
+function confirmDelete(id) {
+	deleteWordbook(id)
+	showDeleteId.value = null
+}
+
+// 返回传给卡片的内联样式（用于渐进改变背景色）
+function pressStyle(wordbook) {
+	// 如果已进入待删除状态（显示叉号），把卡片背景变成与叉相同的深红并保持该状态
+	if (showDeleteId.value === wordbook.id) {
+		return { background: '#c92b2b' }
+	}
+
+	if (!editMode.value) return {}
+	if (pressTargetId.value !== wordbook.id) return {}
+
+	// 基础和目标 alpha 值（与样式中的定义保持一致）
+	const baseAlpha = 0.06
+	const targetAlpha = 0.28
+	const alpha = baseAlpha + (targetAlpha - baseAlpha) * pressProgress.value
+	const color = `rgba(128,0,0,${alpha})`
+	return {
+		background: color
+	}
+}
+
 // 难度选项
 const difficultyOptions = ['简单', '中等', '困难']
 const difficultyIndex = ref(0)
@@ -148,6 +288,8 @@ function onAdd() {
 	newWordbook.description = ''
 	newWordbook.difficulty = 'easy'
 	difficultyIndex.value = 0
+	// 取消任何待删除提示
+	cancelPendingDelete()
 }
 
 // 关闭新增弹窗
@@ -272,6 +414,62 @@ function confirmAdd() {
 	font-weight: bold;
 	color: #333;
 }
+
+/* 编辑模式下：所有卡片变为淡暗红色 */
+.card.editing {
+	background: rgba(128, 0, 0, 0.06); /* 淡暗红色背景 */
+	border-color: rgba(128,0,0,0.18);
+}
+
+/* 覆盖层已移除（编辑模式时文字上方的白色半透明框已取消） */
+
+.delete-btn {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	background: #c92b2b;
+	color: #fff;
+	border: none;
+	padding: 6px 12px;
+	border-radius: 8px;
+	font-size: 14px;
+	cursor: pointer;
+}
+.delete-btn:active { transform: translate(-50%, -50%) scale(0.98); }
+
+/* 卡片被标记为待删除时替换的叉号样式 */
+.delete-cross {
+	font-size: 48px;
+	color: #fff;
+	background: #c92b2b;
+	width: 72px;
+	height: 72px;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	
+	margin: 0 auto;
+	cursor: pointer;
+}
+.delete-cross:active { transform: translate(-50%, -50%) scale(0.98); }
+
+/* 编辑模式下末尾添加卡片样式 */
+.card.add-card {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-style: dashed;
+	background: linear-gradient(135deg, #fff 0%, #fff 100%);
+}
+.add-plus {
+	font-size: 34px;
+	color: #333;
+	font-weight: 700;
+}
+.card.add-card .add-plus { transform: translateY(-4px); }
+.card-content.add-content { padding: 24px; }
 
 /* 弹窗样式 */
 .modal-overlay {
