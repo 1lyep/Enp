@@ -1,5 +1,5 @@
 {
-	"pages": [ 
+	"pages": [
 		{
 			"path": "pages/index/index",
 			"style": {
@@ -9,13 +9,29 @@
 		{
 			"path": "pages/game/game",
 			"style": {
-				"navigationBarTitleText": "单词匹配游戏"
+				"navigationBarTitleText": "单词匹配游戏",
+				"navigationStyle": "custom"
 			}
 		},
 		{
 			"path": "pages/game/wordsIndex",
 			"style": {
-				"navigationBarTitleText": "词书选择"
+				"navigationBarTitleText": "词书选择",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/game/wordManage",
+			"style": {
+				"navigationBarTitleText": "管理词书",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/settings/settings",
+			"style": {
+				"navigationBarTitleText": "设置",
+				"navigationStyle": "custom"
 			}
 		}
 	],
