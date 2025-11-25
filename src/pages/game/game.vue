@@ -11,9 +11,9 @@
 				<text class="timer-text">{{ formatTime(timer) }}</text>
 			</div>
 			
-			<div class="counter">
-				<text class="current">{{ completed.length }}</text>
-				<text class="total">/{{ words.chinese.length }}</text>
+	<div class="counter">
+				<text class="current">{{ totalMatched }}</text>
+				<text class="total">/{{ totalWordCount }}</text>
 			</div>
 		</header>
 
@@ -90,7 +90,9 @@ const selectedEnglish = ref(null)
 const midChinese = ref(null)
 const midEnglish = ref(null)
 const score = ref(0)
-const completed = ref([]) // 存储已完成的中文词
+const completed = ref([]) // 存储当前屏幕上已完成的中文词 (用于样式)
+const totalMatched = ref(0) // 总共完成的单词数
+const totalWordCount = ref(0) // 词书总单词数
 const mistakes = ref(0)
 const timer = ref(0)
 const isGameStarted = ref(false)
@@ -105,11 +107,11 @@ const pendingReplacement = ref([])
 const REPLACE_THRESHOLD = 3 
 
 // 计算属性
-const isGameCompleted = computed(() => wordDatabase.length === 0 && completed.value.length === words.chinese.length)
+const isGameCompleted = computed(() => totalMatched.value === totalWordCount.value)
 
 const progressPercentage = computed(() => {
-	// 简单进度：已完成 / (已完成 + 剩余数据库 + 当前屏幕上未完成)
-	return (completed.value.length / (completed.value.length + wordDatabase.length + (words.chinese.length - completed.value.length))) * 100
+	if (totalWordCount.value === 0) return 0
+	return (totalMatched.value / totalWordCount.value) * 100
 })
 
 onMounted(() => {
@@ -128,6 +130,8 @@ function initGame() {
 		
 		if (storedWordbook && storedWordbook.words && storedWordbook.words.length > 0) {
 			selectedWordbook.value = storedWordbook
+			totalWordCount.value = storedWordbook.words.length
+			totalMatched.value = 0
 			
 			// 清空原有数据库，添加词书中的单词
 			wordDatabase.splice(0, wordDatabase.length)
@@ -206,33 +210,37 @@ function isEnglishCompleted(engWord) {
 function checkMatch() {
 	const chineseIndex = words.chinese.indexOf(selectedChinese.value)
 	const englishIndex = words.english.indexOf(selectedEnglish.value)
+	
+	// Capture current selection locally to avoid race conditions
+	const currentChinese = selectedChinese.value
+	const currentEnglish = selectedEnglish.value
 
 	if (chineseIndex === englishIndex && chineseIndex !== -1) {
 		// 匹配成功
 		score.value += 10
-		completed.value.push(selectedChinese.value)
+		completed.value.push(currentChinese)
+		totalMatched.value++ // 增加总进度计数
 		
 		// 加入待替换队列
 		pendingReplacement.value.push({
-			chinese: selectedChinese.value,
-			english: selectedEnglish.value
+			chinese: currentChinese,
+			english: currentEnglish
 		})
 
 		// 动画
 		const newSet = new Set(animating.value)
-		newSet.add(selectedChinese.value)
-		newSet.add(selectedEnglish.value)
+		newSet.add(currentChinese)
+		newSet.add(currentEnglish)
 		animating.value = newSet
 		
-		midChinese.value = selectedChinese.value
-		midEnglish.value = selectedEnglish.value
+		// Reset selection immediately
 		selectedChinese.value = null
 		selectedEnglish.value = null
 
 		setTimeout(() => {
 			const newSet = new Set(animating.value)
-			newSet.delete(midChinese.value)
-			newSet.delete(midEnglish.value)
+			newSet.delete(currentChinese)
+			newSet.delete(currentEnglish)
 			animating.value = newSet
 
 			// 检查替换
@@ -243,30 +251,24 @@ function checkMatch() {
 			if (isGameCompleted.value) {
 				finishGame()
 			}
-
-			midChinese.value = null
-			midEnglish.value = null
 		}, 500)
 	} else {
 		// 匹配失败
 		mistakes.value++
 		const newSet = new Set(misss.value)
-		newSet.add(selectedChinese.value)
-		newSet.add(selectedEnglish.value)
+		newSet.add(currentChinese)
+		newSet.add(currentEnglish)
 		misss.value = newSet
 		
-		midChinese.value = selectedChinese.value
-		midEnglish.value = selectedEnglish.value
+		// Reset selection immediately
 		selectedChinese.value = null
 		selectedEnglish.value = null
 		
 		setTimeout(() => {
 			const newSet = new Set(misss.value)
-			newSet.delete(midChinese.value)
-			newSet.delete(midEnglish.value)
+			newSet.delete(currentChinese)
+			newSet.delete(currentEnglish)
 			misss.value = newSet
-			midChinese.value = null
-			midEnglish.value = null
 		}, 300)
 	}
 }
@@ -286,40 +288,59 @@ function replaceBatchOfWords() {
 	if (newWords.length === 0) return
 
 	const oldChineseWordsForCleanup = new Set()
+	
+	// 准备新词的中文和英文列表
+	const newChineseList = newWords.map(w => w.chinese)
+	const newEnglishList = newWords.map(w => w.english)
+	
+	// 打乱新词列表，以便随机填入空位
+	const shuffledNewChinese = shuffle([...newChineseList])
+	const shuffledNewEnglish = shuffle([...newEnglishList])
 
-	for (let i = 0; i < wordsToReplace.length && i < newWords.length; i++) {
+	// 找到需要替换的位置索引
+	const chineseIndicesToReplace = []
+	const englishIndicesToReplace = []
+
+	for (let i = 0; i < wordsToReplace.length; i++) {
 		const oldPair = wordsToReplace[i]
-		const newPair = newWords[i]
+		
+		// 记录在乱序列表中的位置
+		const cnIdx = shuffledChinese.value.indexOf(oldPair.chinese)
+		if (cnIdx > -1) chineseIndicesToReplace.push(cnIdx)
+		
+		const enIdx = shuffledEnglish.value.indexOf(oldPair.english)
+		if (enIdx > -1) englishIndicesToReplace.push(enIdx)
 
-		oldChineseWordsForCleanup.add(oldPair.chinese)
+		// 更新主数据源 (保持对应关系)
+		// 注意：主数据源的顺序其实不影响显示，只影响逻辑匹配
+		// 但为了保持一致性，我们还是更新它
+		// 这里稍微复杂一点，因为 newWords 数量可能少于 wordsToReplace (如果数据库空了)
+		if (i < newWords.length) {
+			oldChineseWordsForCleanup.add(oldPair.chinese) // 只有真正被替换的词才从 completed 中移除
 
-		// 替换主数据源
-		const masterIndex = words.chinese.indexOf(oldPair.chinese)
-		if (masterIndex > -1) {
-			words.chinese[masterIndex] = newPair.chinese
-			words.english[masterIndex] = newPair.english
+			const masterIndex = words.chinese.indexOf(oldPair.chinese)
+			if (masterIndex > -1) {
+				words.chinese[masterIndex] = newWords[i].chinese
+				words.english[masterIndex] = newWords[i].english
+			}
 		}
+	}
 
-		// 替换乱序中文列表
-		const shuffledCnIndex = shuffledChinese.value.indexOf(oldPair.chinese)
-		if (shuffledCnIndex > -1) {
-			shuffledChinese.value[shuffledCnIndex] = newPair.chinese
-			
-			// 随机交换中文位置
-			const randomIdx = Math.floor(Math.random() * shuffledChinese.value.length)
-			;[shuffledChinese.value[shuffledCnIndex], shuffledChinese.value[randomIdx]] = 
-			[shuffledChinese.value[randomIdx], shuffledChinese.value[shuffledCnIndex]]
+	// 填入新词到原来的位置 (仅在有新词的情况下)
+	// 如果 newWords 少于 slots (最后几轮)，则剩下的 slot 会保留旧词(但已在completed中)或者变成空?
+	// 现在的逻辑是 completed 包含旧词，所以它们显示为灰色/透明。
+	// 如果没有新词填补，它们应该保持 completed 状态。
+	// 但我们的逻辑是复用 slot。
+	
+	for (let i = 0; i < shuffledNewChinese.length; i++) {
+		if (i < chineseIndicesToReplace.length) {
+			shuffledChinese.value[chineseIndicesToReplace[i]] = shuffledNewChinese[i]
 		}
-
-		// 替换乱序英文列表
-		const shuffledEnIndex = shuffledEnglish.value.indexOf(oldPair.english)
-		if (shuffledEnIndex > -1) {
-			shuffledEnglish.value[shuffledEnIndex] = newPair.english
-			
-			// 随机交换英文位置
-			const randomIdx = Math.floor(Math.random() * shuffledEnglish.value.length)
-			;[shuffledEnglish.value[shuffledEnIndex], shuffledEnglish.value[randomIdx]] = 
-			[shuffledEnglish.value[randomIdx], shuffledEnglish.value[shuffledEnIndex]]
+	}
+	
+	for (let i = 0; i < shuffledNewEnglish.length; i++) {
+		if (i < englishIndicesToReplace.length) {
+			shuffledEnglish.value[englishIndicesToReplace[i]] = shuffledNewEnglish[i]
 		}
 	}
 
@@ -543,13 +564,12 @@ function goBack() {
 @keyframes mistakeMatch {
   0% {
     background-color: #f44336;
-    transform: translateX(0);
   }
-  25% { transform: translateX(-5px); }
-  75% { transform: translateX(5px); }
-  100% {
+  50% {
     background-color: #d32f2f;
-    transform: translateX(0);
+  }
+  100% {
+    background-color: #f44336;
   }
 }
 </style>
