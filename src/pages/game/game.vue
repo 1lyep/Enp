@@ -1,29 +1,36 @@
 <template>
-	<div class="game-page" :class="{ 'dark': theme.state.isDark }">
-		<!-- 顶部导航 -->
+	<div class="game-container" :class="{ 'dark': theme.state.isDark }">
+		<!-- 顶部导航栏 -->
 		<header class="header">
-			<div class="header-btn close-btn" @click="goBack">
-				<text class="icon">✕</text>
+			<!-- 关闭按钮 -->
+			<div class="close-btn" @click="goBack">
+				<text class="material-icons">close</text>
 			</div>
-			
-			<div class="timer-pill">
-				<text class="timer-icon">⏱️</text>
-				<text class="timer-text">{{ formatTime(timer) }}</text>
+
+			<!-- 计时器 -->
+			<div class="timer-container">
+				<text class="material-icons timer-icon">timer</text>
+				<div class="timer-bar-bg">
+					<!-- 倒计时进度条 (假设60秒为满) -->
+					<div class="timer-bar-fill" :style="{ width: Math.min((timer / 60) * 100, 100) + '%' }"></div>
+				</div>
 			</div>
-			
-	<div class="counter">
-				<text class="current">{{ totalMatched }}</text>
-				<text class="total">/{{ totalWordCount }}</text>
+
+			<!-- 计数器 -->
+			<div class="counter">
+				<text class="counter-text">{{ totalMatched }}/{{ totalWordCount }}</text>
 			</div>
 		</header>
 
-		<!-- 进度条 -->
-		<div class="progress-container">
-			<div class="progress-bar" :style="{ width: progressPercentage + '%' }"></div>
+		<!-- 总进度条 -->
+		<div class="progress-section">
+			<div class="progress-track">
+				<div class="progress-fill" :style="{ width: progressPercentage + '%' }"></div>
+			</div>
 		</div>
 
 		<!-- 标题 -->
-		<div class="game-title">Match the Words</div>
+		<h1 class="game-title">Match the Words</h1>
 
 		<!-- 游戏区域 -->
 		<main class="game-board">
@@ -63,6 +70,18 @@
 				</div>
 			</div>
 		</main>
+
+		<!-- 结算弹窗 -->
+		<div v-if="isGameCompleted" class="modal-overlay">
+			<div class="modal-content">
+				<text class="modal-title">恭喜完成！</text>
+				<div class="modal-stats">
+					<text>用时: {{ formatTime(timer) }}</text>
+					<text>得分: {{ score }}</text>
+				</div>
+				<button class="modal-btn" @click="goBack">确定</button>
+			</div>
+		</div>
 	</div>
 </template>
 
@@ -87,8 +106,7 @@ const wordDatabase = reactive([])
 // 游戏状态
 const selectedChinese = ref(null)
 const selectedEnglish = ref(null)
-const midChinese = ref(null)
-const midEnglish = ref(null)
+// midChinese/midEnglish removed as per fix
 const score = ref(0)
 const completed = ref([]) // 存储当前屏幕上已完成的中文词 (用于样式)
 const totalMatched = ref(0) // 总共完成的单词数
@@ -105,9 +123,10 @@ const shuffledEnglish = ref([])
 // 批量替换逻辑
 const pendingReplacement = ref([])
 const REPLACE_THRESHOLD = 3 
+const oldChineseWordsForCleanup = reactive(new Set())
 
 // 计算属性
-const isGameCompleted = computed(() => totalMatched.value === totalWordCount.value)
+const isGameCompleted = computed(() => totalMatched.value === totalWordCount.value && totalWordCount.value > 0)
 
 const progressPercentage = computed(() => {
 	if (totalWordCount.value === 0) return 0
@@ -159,52 +178,48 @@ function initGame() {
 	}
 }
 
-// Fisher-Yates 洗牌算法
-function shuffle(arr) {
-	let i = arr.length
-	while (i) {
-		let j = Math.floor(Math.random() * i--)
-		;[arr[j], arr[i]] = [arr[i], arr[j]]
-	}
-	return arr
-}
-
 function startGame() {
-	score.value = 0
-	completed.value = []
-	mistakes.value = 0
-	timer.value = 0
 	isGameStarted.value = true
+	timer.value = 0
+	score.value = 0
+	mistakes.value = 0
+	completed.value = []
 	
-	// 启动计时器
+	if (timerInterval.value) clearInterval(timerInterval.value)
 	timerInterval.value = setInterval(() => {
 		timer.value++
 	}, 1000)
 }
 
-function selectWord(word, type) {
-	// 如果已完成，不可点击
-	if (type === 'chinese' && completed.value.includes(word)) return
-	if (type === 'english' && isEnglishCompleted(word)) return
+function finishGame() {
+	isGameStarted.value = false
+	clearInterval(timerInterval.value)
+}
 
+function selectWord(word, type) {
+	if (!isGameStarted.value) return
+	
+	// 如果已经完成，或者是待清理的旧词，则不可点击
 	if (type === 'chinese') {
-		selectedChinese.value = selectedChinese.value === word ? null : word
-	} else if (type === 'english') {
-		selectedEnglish.value = selectedEnglish.value === word ? null : word
+		if (completed.value.includes(word) || oldChineseWordsForCleanup.has(word)) return
+		if (selectedChinese.value === word) {
+			selectedChinese.value = null // 取消选中
+			return
+		}
+		selectedChinese.value = word
+	} else {
+		// 英文检查是否已完成 (通过查找对应的中文)
+		if (isEnglishCompleted(word)) return
+		if (selectedEnglish.value === word) {
+			selectedEnglish.value = null
+			return
+		}
+		selectedEnglish.value = word
 	}
 
-	// 检查匹配
 	if (selectedChinese.value && selectedEnglish.value) {
 		checkMatch()
 	}
-}
-
-function isEnglishCompleted(engWord) {
-	// 找到对应的中文
-	const idx = words.english.indexOf(engWord)
-	if (idx === -1) return false
-	const cnWord = words.chinese[idx]
-	return completed.value.includes(cnWord)
 }
 
 function checkMatch() {
@@ -275,29 +290,12 @@ function checkMatch() {
 
 function replaceBatchOfWords() {
 	const wordsToReplace = [...pendingReplacement.value]
-	pendingReplacement.value = []
-
-	const newWords = []
+	pendingReplacement.value = [] // 清空队列
+	
 	// 从数据库取新词
-	for (let i = 0; i < wordsToReplace.length; i++) {
-		if (wordDatabase.length > 0) {
-			newWords.push(wordDatabase.shift()) // 取出并移除
-		}
-	}
-
-	if (newWords.length === 0) return
-
-	const oldChineseWordsForCleanup = new Set()
+	const newWords = wordDatabase.splice(0, wordsToReplace.length)
 	
-	// 准备新词的中文和英文列表
-	const newChineseList = newWords.map(w => w.chinese)
-	const newEnglishList = newWords.map(w => w.english)
-	
-	// 打乱新词列表，以便随机填入空位
-	const shuffledNewChinese = shuffle([...newChineseList])
-	const shuffledNewEnglish = shuffle([...newEnglishList])
-
-	// 找到需要替换的位置索引
+	// 记录需要更新的位置
 	const chineseIndicesToReplace = []
 	const englishIndicesToReplace = []
 
@@ -312,9 +310,6 @@ function replaceBatchOfWords() {
 		if (enIdx > -1) englishIndicesToReplace.push(enIdx)
 
 		// 更新主数据源 (保持对应关系)
-		// 注意：主数据源的顺序其实不影响显示，只影响逻辑匹配
-		// 但为了保持一致性，我们还是更新它
-		// 这里稍微复杂一点，因为 newWords 数量可能少于 wordsToReplace (如果数据库空了)
 		if (i < newWords.length) {
 			oldChineseWordsForCleanup.add(oldPair.chinese) // 只有真正被替换的词才从 completed 中移除
 
@@ -326,42 +321,69 @@ function replaceBatchOfWords() {
 		}
 	}
 
-	// 填入新词到原来的位置 (仅在有新词的情况下)
-	// 如果 newWords 少于 slots (最后几轮)，则剩下的 slot 会保留旧词(但已在completed中)或者变成空?
-	// 现在的逻辑是 completed 包含旧词，所以它们显示为灰色/透明。
-	// 如果没有新词填补，它们应该保持 completed 状态。
-	// 但我们的逻辑是复用 slot。
-	
-	for (let i = 0; i < shuffledNewChinese.length; i++) {
-		if (i < chineseIndicesToReplace.length) {
-			shuffledChinese.value[chineseIndicesToReplace[i]] = shuffledNewChinese[i]
+	// 延迟一点更新视图，让消失动画播完
+	setTimeout(() => {
+		// 替换乱序列表中的词
+		for (let i = 0; i < wordsToReplace.length; i++) {
+			if (i < newWords.length) {
+				// 有新词，替换
+				if (chineseIndicesToReplace[i] !== undefined) {
+					shuffledChinese.value[chineseIndicesToReplace[i]] = newWords[i].chinese
+				}
+				if (englishIndicesToReplace[i] !== undefined) {
+					shuffledEnglish.value[englishIndicesToReplace[i]] = newWords[i].english
+				}
+				
+				// 从 completed 中移除旧词 (因为位置已经被新词占据)
+				const oldCn = wordsToReplace[i].chinese
+				const idx = completed.value.indexOf(oldCn)
+				if (idx > -1) completed.value.splice(idx, 1)
+				
+				// 从 cleanup 集合中移除
+				oldChineseWordsForCleanup.delete(oldCn)
+			} else {
+				// 没有新词了 (数据库空了)，保持原样 (灰色显示)
+				// 不做任何操作，它们已经在 completed 列表中了
+			}
 		}
-	}
-	
-	for (let i = 0; i < shuffledNewEnglish.length; i++) {
-		if (i < englishIndicesToReplace.length) {
-			shuffledEnglish.value[englishIndicesToReplace[i]] = shuffledNewEnglish[i]
+		
+		// 随机交换新加入的位置，防止位置固定
+		// 仅交换 chineseIndicesToReplace 中的位置
+		if (newWords.length > 1) {
+			shuffleSubset(shuffledChinese.value, chineseIndicesToReplace.slice(0, newWords.length))
+			shuffleSubset(shuffledEnglish.value, englishIndicesToReplace.slice(0, newWords.length))
 		}
-	}
 
-	// 从 completed 中移除旧词，这样新词就是"未完成"状态
-	completed.value = completed.value.filter(word => !oldChineseWordsForCleanup.has(word))
+	}, 200)
 }
 
-function finishGame() {
-	clearInterval(timerInterval.value)
-	uni.showModal({
-		title: '恭喜完成！',
-		content: `用时：${formatTime(timer.value)}\n得分：${score.value}`,
-		showCancel: false,
-		success: () => goBack()
+// 辅助：仅打乱数组中指定索引的元素
+function shuffleSubset(array, indices) {
+	// 提取值
+	const values = indices.map(i => array[i])
+	// 打乱值
+	for (let i = values.length - 1; i > 0; i--) {
+		const j = Math.floor(Math.random() * (i + 1));
+		[values[i], values[j]] = [values[j], values[i]];
+	}
+	// 放回
+	indices.forEach((index, i) => {
+		array[index] = values[i]
 	})
 }
 
-function formatTime(s) {
-	const m = Math.floor(s / 60)
-	const sc = s % 60
-	return `${m}:${sc.toString().padStart(2, '0')}`
+function isEnglishCompleted(englishWord) {
+	// 找到对应的中文
+	const index = words.english.indexOf(englishWord)
+	if (index === -1) return false // 可能是旧词或错误
+	const chineseWord = words.chinese[index]
+	return completed.value.includes(chineseWord) || oldChineseWordsForCleanup.has(chineseWord)
+}
+
+function formatTime(seconds) {
+	const m = Math.floor(seconds / 60)
+	const s = seconds % 60
+	return `${m}:${s.toString().padStart(2, '0')}`
 }
 
 function goBack() {
@@ -374,202 +396,284 @@ function goBack() {
 		})
 	}
 }
+
+// Fisher-Yates Shuffle
+function shuffle(array) {
+	for (let i = array.length - 1; i > 0; i--) {
+		const j = Math.floor(Math.random() * (i + 1));
+		[array[i], array[j]] = [array[j], array[i]];
+	}
+	return array;
+}
 </script>
 
 <style scoped>
-.game-page {
+/* 
+  Theme Variables 
+  Primary: #3d5a80 (Deep Blue)
+  Background Light: #f7f7f7
+  Background Dark: #18181a
+  Card Light: #ffffff
+  Card Dark: #2c313a
+  Text Light: #1f2937
+  Text Dark: #e5e7eb
+*/
+
+.game-container {
 	min-height: 100vh;
-	background: #f8f9fa;
+	background-color: #f7f7f7;
 	display: flex;
 	flex-direction: column;
-	padding: 0 20px;
-	padding-top: env(safe-area-inset-top);
-	transition: background 0.3s;
+	padding-bottom: 40px;
+	transition: background-color 0.3s;
 }
 
-.game-page.dark {
-	background: #121212;
+.game-container.dark {
+	background-color: #18181a;
 }
 
 /* Header */
 .header {
-	height: 60px;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	margin-bottom: 10px;
+	padding: 16px 20px;
+	padding-top: calc(env(safe-area-inset-top) + 16px);
 }
 
-.header-btn {
-	width: 40px;
-	height: 40px;
+.close-btn {
+	width: 48px;
+	height: 48px;
 	border-radius: 50%;
-	background: #e9ecef;
+	background-color: #e5e7eb;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	color: #495057;
+	cursor: pointer;
+	transition: transform 0.1s;
 }
+.dark .close-btn { background-color: #374151; }
+.close-btn:active { transform: scale(0.95); }
 
-.dark .header-btn {
-	background: #2d2d2d;
-	color: #fff;
+.material-icons {
+	font-family: 'Material Icons'; /* Ensure font is loaded or use unicode */
+	font-size: 24px;
+	color: #1f2937;
 }
+.dark .material-icons { color: #e5e7eb; }
 
-.timer-pill {
-	background: #e9ecef;
-	padding: 6px 16px;
-	border-radius: 100px;
+.timer-container {
 	display: flex;
 	align-items: center;
-	gap: 6px;
-	color: #495057;
-	font-weight: 600;
-	font-size: 14px;
+	gap: 8px;
 }
 
-.dark .timer-pill {
-	background: #2d2d2d;
-	color: #fff;
+.timer-icon {
+	color: #1f2937;
+	opacity: 0.8;
+}
+.dark .timer-icon { color: #e5e7eb; }
+
+.timer-bar-bg {
+	width: 100px;
+	height: 16px;
+	background-color: #e5e7eb;
+	border-radius: 999px;
+	overflow: hidden;
+}
+.dark .timer-bar-bg { background-color: #374151; }
+
+.timer-bar-fill {
+	height: 100%;
+	background-color: #3d5a80; /* Primary */
+	border-radius: 999px;
+	transition: width 1s linear;
 }
 
 .counter {
-	font-size: 16px;
+	font-size: 14px;
 	font-weight: 700;
-	color: #212529;
+	color: #1f2937;
+}
+.dark .counter { color: #e5e7eb; }
+
+/* Progress Bar */
+.progress-section {
+	padding: 8px 16px;
 }
 
-.dark .counter { color: #fff; }
-
-/* Progress */
-.progress-container {
-	height: 8px;
-	background: #e9ecef;
-	border-radius: 4px;
+.progress-track {
+	width: 100%;
+	height: 16px;
+	background-color: #e5e7eb;
+	border-radius: 999px;
 	overflow: hidden;
-	margin-bottom: 30px;
 }
+.dark .progress-track { background-color: #374151; }
 
-.dark .progress-container { background: #2d2d2d; }
-
-.progress-bar {
+.progress-fill {
 	height: 100%;
-	background: #2ecc71;
-	border-radius: 4px;
+	background-color: #10b981; /* Green-500 */
+	border-radius: 999px;
 	transition: width 0.3s ease;
 }
 
 /* Title */
 .game-title {
-	font-size: 28px;
-	font-weight: 800;
+	font-size: 32px;
+	font-weight: 700;
 	text-align: center;
-	color: #212529;
-	margin-bottom: 30px;
+	color: #1f2937;
+	margin: 16px 0;
+	letter-spacing: -0.02em;
 }
-
-.dark .game-title { color: #fff; }
+.dark .game-title { color: #e5e7eb; }
 
 /* Game Board */
 .game-board {
-	display: flex;
-	gap: 20px;
 	flex: 1;
+	display: flex;
+	padding: 16px;
+	gap: 16px;
 }
 
 .grid-column {
 	flex: 1;
 	display: flex;
 	flex-direction: column;
-	gap: 16px;
+	gap: 12px;
 }
 
+/* Word Card */
 .word-card {
-	height: 60px;
-	background: #fff;
-	border-radius: 100px; /* Pill shape */
+	background-color: #ffffff;
+	border: 1px solid #e5e7eb;
+	border-radius: 12px; /* rounded-lg */
+	padding: 16px;
+	min-height: 72px;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+	box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); /* shadow-sm */
 	transition: all 0.2s;
-	border: 2px solid transparent;
+	cursor: pointer;
 }
 
 .dark .word-card {
-	background: #2d2d2d;
+	background-color: #2c313a;
+	border-color: #4a515e;
 	box-shadow: none;
-}
-
-.word-card:active { transform: scale(0.96); }
-
-.word-card.selected {
-	background: #4361ee !important;
-	border-color: #4361ee;
-	box-shadow: 0 4px 12px rgba(67, 97, 238, 0.3);
-	transform: scale(1.05);
-}
-
-.word-card.selected .word-text { color: #fff; }
-
-/* 
-  Fix for Dark Mode Green Feedback:
-  Use :not(.correct-match) to ensure completed style doesn't override animation 
-*/
-.word-card.completed:not(.correct-match) {
-	background-color: #e9ecef !important;
-	box-shadow: none;
-	opacity: 0.6;
-}
-
-.dark .word-card.completed:not(.correct-match) {
-	background-color: #333 !important;
-}
-
-.word-card.completed .word-text {
-	color: #adb5bd;
-}
-
-.word-card.correct-match {
-	animation: correctMatch 0.3s forwards;
-	pointer-events: none;
-}
-
-.word-card.mistake {
-	animation: mistakeMatch 0.3s forwards;
 }
 
 .word-text {
-	font-size: 16px;
+	font-size: 20px; /* text-xl */
+	font-weight: 700;
+	color: #1f2937;
+	text-align: center;
+	line-height: 1.25;
+}
+.dark .word-text { color: #e5e7eb; }
+
+/* Selected State */
+.word-card.selected {
+	background-color: #3d5a80; /* Primary */
+	border-color: transparent;
+	box-shadow: 0 10px 15px -3px rgba(61, 90, 128, 0.3); /* shadow-lg */
+	/* Ring effect simulated with box-shadow or border */
+	outline: 4px solid rgba(61, 90, 128, 0.5);
+}
+
+.word-card.selected .word-text {
+	color: #ffffff;
+}
+
+/* Completed State */
+.word-card.completed {
+	background-color: #f3f4f6;
+	border-color: transparent;
+	opacity: 0.6;
+	pointer-events: none;
+}
+.dark .word-card.completed {
+	background-color: #1f2937;
+}
+
+.word-card.completed .word-text {
+	color: #9ca3af;
+}
+
+/* Correct Match Animation */
+.word-card.correct-match {
+	background-color: #10b981 !important; /* Green */
+	border-color: transparent !important;
+	transform: scale(1.05);
+}
+.word-card.correct-match .word-text {
+	color: #ffffff !important;
+}
+
+/* Mistake Animation */
+.word-card.mistake {
+	background-color: #ef4444 !important; /* Red */
+	border-color: transparent !important;
+	animation: pulse 0.3s ease-in-out;
+}
+.word-card.mistake .word-text {
+	color: #ffffff !important;
+}
+
+@keyframes pulse {
+	0%, 100% { transform: scale(1); }
+	50% { transform: scale(0.95); }
+}
+
+/* Modal */
+.modal-overlay {
+	position: fixed;
+	top: 0; left: 0; right: 0; bottom: 0;
+	background-color: rgba(0, 0, 0, 0.5);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 100;
+}
+
+.modal-content {
+	background-color: #ffffff;
+	padding: 32px;
+	border-radius: 24px;
+	align-items: center;
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	width: 80%;
+	max-width: 320px;
+}
+.dark .modal-content { background-color: #2c313a; }
+
+.modal-title {
+	font-size: 24px;
+	font-weight: 700;
+	color: #1f2937;
+}
+.dark .modal-title { color: #e5e7eb; }
+
+.modal-stats {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+	color: #4b5563;
+}
+.dark .modal-stats { color: #9ca3af; }
+
+.modal-btn {
+	background-color: #3d5a80;
+	color: #ffffff;
+	padding: 12px 32px;
+	border-radius: 999px;
 	font-weight: 600;
-	color: #212529;
-}
-
-.dark .word-text { color: #fff; }
-
-@keyframes correctMatch {
-  0% {
-    background-color: #4CAF50;
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.1);
-  }
-  100% {
-    background-color: #45a049;
-    transform: scale(1);
-  }
-}
-
-@keyframes mistakeMatch {
-  0% {
-    background-color: #f44336;
-  }
-  50% {
-    background-color: #d32f2f;
-  }
-  100% {
-    background-color: #f44336;
-  }
+	border: none;
+	margin-top: 16px;
 }
 </style>

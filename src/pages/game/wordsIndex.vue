@@ -1,13 +1,13 @@
 <template>
-	<div class="words-index">
+	<div class="words-index" :class="{ 'dark': theme.state.isDark }">
 		<!-- 顶部导航 -->
 		<header class="topbar">
 			<view class="left-actions">
-				<view class="action-btn" @click="goToSettings">
-					<text class="icon">⚙️</text>
+				<view class="action-btn" @click="goBack">
+					<text class="icon">←</text>
 				</view>
 			</view>
-			<view class="title">我的词书</view>
+			<view class="title">选择词书</view>
 			<view class="right-actions">
 				<view class="action-btn" @click="openAddModal">
 					<text class="plus-icon">+</text>
@@ -22,23 +22,21 @@
 					:key="wordbook.id"
 					class="card"
 					@click="onCardClick(wordbook)"
+					@longpress="openMenu(wordbook)"
 				>
-					<!-- 渐变背景装饰 -->
-					<div class="card-bg" :style="{ background: wordbook.gradient || defaultGradient }"></div>
-					
-					<div class="card-body">
+					<div class="card-left">
 						<div class="card-icon">{{ wordbook.icon || '📖' }}</div>
 						<div class="card-info">
 							<div class="card-title">{{ wordbook.title }}</div>
-							<div class="card-desc">{{ wordbook.description || '暂无描述' }}</div>
 							<div class="card-meta">
-								<text class="badge">{{ getDifficultyText(wordbook.difficulty) }}</text>
-								<text class="count">{{ wordbook.wordCount || 0 }} 词</text>
+								<text class="count">共 {{ wordbook.wordCount || 0 }} 词</text>
 							</div>
 						</div>
-						<!-- 菜单按钮 -->
-						<div class="card-menu-btn" @click.stop="openMenu(wordbook)">
-							<text class="dots">•••</text>
+					</div>
+					
+					<div class="card-right">
+						<div class="action-pill" @click.stop="selectWordbook(wordbook)">
+							<text class="action-text">选择</text>
 						</div>
 					</div>
 				</div>
@@ -125,10 +123,10 @@
 import { ref, reactive, onMounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import DB from '@/utils/db.js'
+import theme from '@/utils/theme.js'
 
 // --- 数据 ---
 const wordbooks = ref([])
-const defaultGradient = 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)'
 
 // 底部弹窗状态
 const showBottomSheet = ref(false)
@@ -175,9 +173,16 @@ function getDifficultyText(val) {
 	return map[val] || '简单'
 }
 
-// 点击卡片 -> 直接开始练习 (或者根据需求改为打开菜单，这里设定为直接开始，菜单在右下角)
+// 点击卡片 -> 打开菜单 (或者根据需求)
+// 设计图上有"选择"按钮，点击按钮进入游戏。点击卡片本身可以进入管理或详情？
+// 这里设定：点击卡片 -> 打开菜单
 function onCardClick(book) {
-	selectWordbook(book)
+	// openMenu(book)
+	// 或者什么都不做，只响应按钮？
+	// 为了方便，点击卡片也进入游戏吧，或者打开菜单
+	// 按照设计，右侧有按钮，通常意味着左侧点击是详情或无操作
+	// 让我们让点击卡片打开菜单，点击按钮选择
+	openMenu(book)
 }
 
 // 打开菜单
@@ -250,7 +255,6 @@ async function submitForm() {
 				description: formData.description || '自定义词书',
 				icon: '📖',
 				difficulty: formData.difficulty,
-				gradient: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)' // 可以随机生成
 			}
 			await DB.addWordBook(newBook)
 			uni.showToast({ title: '创建成功', icon: 'success' })
@@ -300,11 +304,21 @@ function closeBottomSheet() {
 	showBottomSheet.value = false
 }
 
-// 跳转设置
-function goToSettings() {
-	uni.navigateTo({
-		url: '/pages/settings/settings'
-	})
+// 返回
+function goBack() {
+	// 如果有上一页则返回，否则去设置页或者退出？
+	// 截图显示是返回箭头，通常是返回上一级
+	// 如果这是首页，可能需要特殊处理
+	const pages = getCurrentPages()
+	if (pages.length > 1) {
+		uni.navigateBack()
+	} else {
+		// 如果是首页，点击返回可能是去设置？或者什么都不做
+		// 为了方便，这里去设置页，模拟"更多"
+		uni.navigateTo({
+			url: '/pages/settings/settings'
+		})
+	}
 }
 
 // 进入游戏逻辑
@@ -329,14 +343,19 @@ async function selectWordbook(wordbook) {
 <style scoped>
 .words-index {
 	min-height: 100vh;
-	background: #f5f7fa;
+	background: #f0f2f5; /* Light gray bg */
 	padding-bottom: 40px;
+	transition: background 0.3s;
+}
+
+.words-index.dark {
+	background: #121212;
 }
 
 /* 顶部导航 */
 .topbar {
-	background: #fff;
-	height: 56px;
+	background: transparent;
+	height: 60px;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -345,34 +364,36 @@ async function selectWordbook(wordbook) {
 	position: sticky;
 	top: 0;
 	z-index: 100;
-	box-shadow: 0 2px 12px rgba(0,0,0,0.03);
 }
 
 .title {
-	font-size: 20px;
+	font-size: 18px;
 	font-weight: 700;
 	color: #1a1a1a;
 }
 
+.dark .title { color: #fff; }
+
 .action-btn {
-	width: 36px;
-	height: 36px;
+	width: 40px;
+	height: 40px;
 	border-radius: 50%;
-	background: #f0f2f5;
+	background: #fff;
 	display: flex;
 	align-items: center;
 	justify-content: center;
+	box-shadow: 0 2px 8px rgba(0,0,0,0.05);
 	transition: all 0.2s;
 }
-.action-btn:active { background: #e1e4e8; }
-.plus-icon { font-size: 24px; color: #333; line-height: 1; font-weight: 300; }
-.icon { font-size: 18px; }
 
-.left-actions, .right-actions {
-	width: 40px; /* 占位宽度保持标题居中 */
-	display: flex;
-	justify-content: center;
+.dark .action-btn {
+	background: #2d2d2d;
+	color: #fff;
 }
+
+.action-btn:active { transform: scale(0.95); }
+.plus-icon { font-size: 24px; font-weight: 300; }
+.icon { font-size: 20px; }
 
 /* 内容区 */
 .content {
@@ -388,50 +409,58 @@ async function selectWordbook(wordbook) {
 
 .card {
 	background: #fff;
-	border-radius: 16px;
-	overflow: hidden;
-	position: relative;
-	box-shadow: 0 4px 16px rgba(0,0,0,0.04);
-	transition: transform 0.1s;
+	border-radius: 100px; /* Pill shape */
+	padding: 10px 20px; /* Adjust padding */
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+	transition: all 0.2s;
+	height: 80px; /* Fixed height for consistency */
+	box-sizing: border-box;
 }
+
+.dark .card {
+	background: #2d2d2d;
+	box-shadow: none;
+}
+
 .card:active { transform: scale(0.98); }
 
-/* 卡片左侧/背景装饰条 */
-.card-bg {
-	position: absolute;
-	top: 0;
-	bottom: 0;
-	left: 0;
-	width: 6px;
-}
-
-.card-body {
-	padding: 20px;
-	padding-left: 26px; /* 避开左侧条 */
+.card-left {
 	display: flex;
 	align-items: center;
 	gap: 16px;
-}
-
-.card-icon {
-	font-size: 32px;
-	width: 48px;
-	height: 48px;
-	background: #f8f9fa;
-	border-radius: 12px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-}
-
-.card-info {
 	flex: 1;
 	overflow: hidden;
 }
 
+.card-icon {
+	width: 48px;
+	height: 48px;
+	background: #eef2f7;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 24px;
+	flex-shrink: 0;
+}
+
+.dark .card-icon {
+	background: #3d3d3d;
+}
+
+.card-info {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	overflow: hidden;
+}
+
 .card-title {
-	font-size: 18px;
-	font-weight: 600;
+	font-size: 16px;
+	font-weight: 700;
 	color: #1a1a1a;
 	margin-bottom: 4px;
 	white-space: nowrap;
@@ -439,42 +468,38 @@ async function selectWordbook(wordbook) {
 	text-overflow: ellipsis;
 }
 
-.card-desc {
-	font-size: 13px;
-	color: #8c9ba5;
-	margin-bottom: 8px;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
-.card-meta {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-}
-
-.badge {
-	font-size: 11px;
-	padding: 2px 8px;
-	background: #edf2f7;
-	color: #4a5568;
-	border-radius: 100px;
-	font-weight: 500;
-}
+.dark .card-title { color: #fff; }
 
 .count {
 	font-size: 12px;
-	color: #a0aec0;
+	color: #8c9ba5;
 }
 
-.card-menu-btn {
-	padding: 8px;
-	margin-right: -8px;
-	color: #cbd5e0;
+.dark .count { color: #a0aec0; }
+
+.card-right {
+	margin-left: 12px;
+	flex-shrink: 0;
 }
-.card-menu-btn:active { color: #718096; }
-.dots { font-size: 20px; letter-spacing: 1px; font-weight: bold; transform: rotate(90deg); }
+
+.action-pill {
+	background: #34495e;
+	padding: 8px 20px;
+	border-radius: 100px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.dark .action-pill {
+	background: #4a5568;
+}
+
+.action-text {
+	color: #fff;
+	font-size: 14px;
+	font-weight: 600;
+}
 
 /* 空状态 */
 .empty-state {
@@ -530,6 +555,10 @@ async function selectWordbook(wordbook) {
 	flex-direction: column;
 }
 
+.dark .bottom-sheet {
+	background: #1e1e1e;
+}
+
 .bottom-sheet-container.show .bottom-sheet {
 	transform: translateY(0);
 }
@@ -547,11 +576,15 @@ async function selectWordbook(wordbook) {
 	border-bottom: 1px solid #f0f0f0;
 }
 
+.dark .sheet-header { border-bottom-color: #333; }
+
 .sheet-title {
 	font-size: 18px;
 	font-weight: 600;
 	color: #1a1a1a;
 }
+
+.dark .sheet-title { color: #fff; }
 
 .sheet-close {
 	font-size: 20px;
@@ -571,9 +604,11 @@ async function selectWordbook(wordbook) {
 	transition: background 0.2s;
 }
 .menu-item:active { background: #f7fafc; }
+.dark .menu-item:active { background: #333; }
 
 .menu-icon { font-size: 20px; margin-right: 16px; width: 24px; text-align: center; }
 .menu-text { font-size: 16px; color: #2d3748; font-weight: 500; }
+.dark .menu-text { color: #fff; }
 
 .menu-item.delete .menu-text { color: #e53e3e; }
 
@@ -584,6 +619,7 @@ async function selectWordbook(wordbook) {
 	font-size: 15px;
 	border-top: 8px solid #f7fafc;
 }
+.dark .sheet-cancel { border-top-color: #333; color: #a0aec0; }
 
 /* 表单模式样式 */
 .sheet-form {
@@ -606,6 +642,7 @@ async function selectWordbook(wordbook) {
 	margin-bottom: 8px;
 	font-weight: 500;
 }
+.dark .label { color: #a0aec0; }
 
 .input {
 	width: 100%;
@@ -617,6 +654,7 @@ async function selectWordbook(wordbook) {
 	color: #1a1a1a;
 	box-sizing: border-box;
 }
+.dark .input { background: #333; color: #fff; }
 
 .difficulty-options {
 	display: flex;
@@ -632,6 +670,7 @@ async function selectWordbook(wordbook) {
 	transition: all 0.2s;
 	border: 1px solid transparent;
 }
+.dark .diff-chip { background: #333; color: #a0aec0; }
 
 .diff-chip.active {
 	background: #ebf8ff;
@@ -639,11 +678,13 @@ async function selectWordbook(wordbook) {
 	border-color: #bee3f8;
 	font-weight: 600;
 }
+.dark .diff-chip.active { background: #2c5282; color: #fff; border-color: #2b6cb0; }
 
 .form-footer {
 	padding: 16px 24px;
 	border-top: 1px solid #f0f0f0;
 }
+.dark .form-footer { border-top-color: #333; }
 
 .submit-btn {
 	width: 100%;
@@ -658,5 +699,6 @@ async function selectWordbook(wordbook) {
 	align-items: center;
 	justify-content: center;
 }
+.dark .submit-btn { background: #4a5568; }
 .submit-btn:active { opacity: 0.9; }
 </style>
