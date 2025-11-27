@@ -1,1 +1,2 @@
-An English learning App
+
+2025.11.27 - /  暂时暂停更新
